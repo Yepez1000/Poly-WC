@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>World Cup Winner Backtest</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Economic soccer model</p>
+          <h1>World Cup Winner Backtest</h1>
+          <p class="lede">
+            A transparent four-factor model for international soccer: population,
+            climate, wealth, and FIFA ranking. Tune the weights, backtest World Cup
+            finals, then compare current national teams head to head.
+          </p>
+        </div>
+        <div class="score-card" aria-live="polite">
+          <span class="score-card__label">Backtest accuracy</span>
+          <strong id="accuracy">--</strong>
+          <span id="record">--</span>
+        </div>
+      </section>
+
+      <section class="control-panel" aria-labelledby="weights-title">
+        <div>
+          <p class="eyebrow">Model weights</p>
+          <h2 id="weights-title">Adjust the thesis</h2>
+        </div>
+        <div class="sliders" id="weights"></div>
+      </section>
+
+      <section class="predictor" aria-labelledby="predictor-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Current team comparison</p>
+            <h2 id="predictor-title">Predict a match winner</h2>
+          </div>
+          <p>FIFA ranks are labeled from the June 11, 2026 ranking update.</p>
+        </div>
+        <div class="matchup-controls">
+          <label>
+            Team A
+            <select id="team-a"></select>
+          </label>
+          <button id="swap" class="icon-button" type="button" aria-label="Swap teams" title="Swap teams">⇄</button>
+          <label>
+            Team B
+            <select id="team-b"></select>
+          </label>
+        </div>
+        <div id="matchup" class="matchup-result"></div>
+      </section>
+
+      <section aria-labelledby="backtest-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Historical finals</p>
+            <h2 id="backtest-title">Backtest results</h2>
+          </div>
+          <p>Scope starts in 1994 because the FIFA men's ranking began in December 1992.</p>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Year</th>
+                <th>Final</th>
+                <th>Model pick</th>
+                <th>Actual</th>
+                <th>Edge</th>
+                <th>Key driver</th>
+              </tr>
+            </thead>
+            <tbody id="backtest"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="method" aria-labelledby="method-title">
+        <div>
+          <p class="eyebrow">Method</p>
+          <h2 id="method-title">How the model scores teams</h2>
+        </div>
+        <div class="method-grid">
+          <article>
+            <h3>Population</h3>
+            <p>Log-scaled, so a larger country gets talent-pool credit without making Brazil or the United States automatically unbeatable.</p>
+          </article>
+          <article>
+            <h3>Climate</h3>
+            <p>Rewards countries near a mild annual temperature and penalizes extreme heat or cold that can limit year-round outdoor play.</p>
+          </article>
+          <article>
+            <h3>Wealth</h3>
+            <p>Log-scaled GDP per person at purchasing-power parity, used as a proxy for schools, academies, training grounds, and coaching capacity.</p>
+          </article>
+          <article>
+            <h3>FIFA ranking</h3>
+            <p>Converts rank into a strength score, giving the current generation of players the largest default influence.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
