@@ -30,6 +30,7 @@ RAW = ROOT / "data" / "raw"
 PROCESSED = ROOT / "data" / "processed"
 
 RESULTS_URL = "https://raw.githubusercontent.com/martj42/international_results/master/results.csv"
+SHOOTOUTS_URL = "https://raw.githubusercontent.com/martj42/international_results/master/shootouts.csv"
 WORLD_BANK_URL = "https://api.worldbank.org/v2/country/{countries}/indicator/{indicator}?format=json&per_page=20000"
 
 POPULATION_INDICATOR = "SP.POP.TOTL"
@@ -219,12 +220,27 @@ class Match:
     score_b: int
     city: str
     country: str
+    shootout_winner: str | None = None
 
     @property
-    def winner(self) -> str | None:
+    def regulation_winner(self) -> str | None:
         if self.score_a == self.score_b:
             return None
         return self.team_a if self.score_a > self.score_b else self.team_b
+
+    def actual_winner(self, result_mode: str) -> str | None:
+        if self.regulation_winner:
+            return self.regulation_winner
+        if result_mode == "advancement" and self.shootout_winner:
+            return self.shootout_winner
+        return None
+
+    def result_decision(self, result_mode: str) -> str:
+        if self.regulation_winner:
+            return "goals"
+        if result_mode == "advancement" and self.shootout_winner:
+            return "penalties"
+        return "draw"
 
 
 def canonical_country(name: str) -> str:
@@ -249,8 +265,23 @@ def fetch(url: str, path: Path) -> Path:
     return path
 
 
+def read_shootouts() -> dict[tuple[date, str, str], str]:
+    path = fetch(SHOOTOUTS_URL, RAW / "shootouts.csv")
+    shootouts: dict[tuple[date, str, str], str] = {}
+    with path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            match_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
+            home = canonical_country(row["home_team"])
+            away = canonical_country(row["away_team"])
+            winner = canonical_country(row["winner"])
+            shootouts[(match_date, home, away)] = winner
+            shootouts[(match_date, away, home)] = winner
+    return shootouts
+
+
 def read_world_cup_matches() -> list[Match]:
     path = fetch(RESULTS_URL, RAW / "international_results.csv")
+    shootouts = read_shootouts()
     matches: list[Match] = []
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
@@ -259,16 +290,19 @@ def read_world_cup_matches() -> list[Match]:
             match_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
             if not START_YEAR <= match_date.year <= END_YEAR:
                 continue
+            team_a = canonical_country(row["home_team"])
+            team_b = canonical_country(row["away_team"])
             matches.append(
                 Match(
                     match_date=match_date,
                     year=match_date.year,
-                    team_a=canonical_country(row["home_team"]),
-                    team_b=canonical_country(row["away_team"]),
+                    team_a=team_a,
+                    team_b=team_b,
                     score_a=int(row["home_score"]),
                     score_b=int(row["away_score"]),
                     city=row["city"],
                     country=row["country"],
+                    shootout_winner=shootouts.get((match_date, team_a, team_b)),
                 )
             )
     return matches
@@ -433,7 +467,7 @@ def ranking_score(rank: int) -> float:
     return 1 - math.log(rank) / math.log(211)
 
 
-def build_feature_rows(matches: list[Match], ranking_csv: Path | None) -> tuple[list[dict], str]:
+def build_feature_rows(matches: list[Match], ranking_csv: Path | None, result_mode: str) -> tuple[list[dict], str]:
     countries = {match.team_a for match in matches} | {match.team_b for match in matches}
     missing_iso = sorted(country for country in countries if country not in COUNTRY_ISO3)
     missing_climate = sorted(country for country in countries if country not in CLIMATE_C)
@@ -466,6 +500,8 @@ def build_feature_rows(matches: list[Match], ranking_csv: Path | None) -> tuple[
 
     rows = []
     for match_id, match in enumerate(matches, start=1):
+        actual_winner = match.actual_winner(result_mode)
+        result_decision = match.result_decision(result_mode)
         for side, country, opponent in (
             ("a", match.team_a, match.team_b),
             ("b", match.team_b, match.team_a),
@@ -493,7 +529,9 @@ def build_feature_rows(matches: list[Match], ranking_csv: Path | None) -> tuple[
                     "ranking_score": ranking_score(rank),
                     "score_for": match.score_a if side == "a" else match.score_b,
                     "score_against": match.score_b if side == "a" else match.score_a,
-                    "actual": "draw" if match.winner is None else ("win" if country == match.winner else "loss"),
+                    "shootout_winner": match.shootout_winner or "",
+                    "result_decision": result_decision,
+                    "actual": "draw" if actual_winner is None else ("win" if country == actual_winner else "loss"),
                     "city": match.city,
                     "host_country": match.country,
                 }
@@ -541,6 +579,8 @@ def evaluate(feature_rows: list[dict], weights: dict[str, float]) -> tuple[float
                 "team_b": b["team"],
                 "score_a": a["score_for"],
                 "score_b": b["score_for"],
+                "result_decision": a["result_decision"],
+                "shootout_winner": a["shootout_winner"],
                 "actual_winner": actual or "draw",
                 "predicted_winner": predicted,
                 "model_edge": round(score_a - score_b, 6),
@@ -597,13 +637,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Optimize World Cup economic model weights.")
     parser.add_argument("--ranking-csv", type=Path, help="Optional historical FIFA ranking CSV.")
     parser.add_argument("--step", type=float, default=0.05, help="Weight grid step. Default: 0.05")
+    parser.add_argument(
+        "--result-mode",
+        choices=["advancement", "regulation"],
+        default="advancement",
+        help="advancement counts penalty shootout winners; regulation treats tied scores as draws. Default: advancement",
+    )
     args = parser.parse_args()
 
     RAW.mkdir(parents=True, exist_ok=True)
     PROCESSED.mkdir(parents=True, exist_ok=True)
 
     matches = read_world_cup_matches()
-    feature_rows, ranking_source = build_feature_rows(matches, args.ranking_csv)
+    feature_rows, ranking_source = build_feature_rows(matches, args.ranking_csv, args.result_mode)
     best_weights, (accuracy, correct, total) = optimize(feature_rows, args.step)
     _, _, _, predictions = evaluate(feature_rows, best_weights)
 
@@ -611,25 +657,38 @@ def main() -> None:
     write_csv(PROCESSED / "world_cup_team_match_features.csv", feature_rows)
 
     decisive_by_year = defaultdict(lambda: [0, 0])
+    penalties_scored = 0
+    penalty_correct = 0
     for row in predictions:
         if row["correct_decisive"] == "":
             continue
         decisive_by_year[int(row["year"])][0] += int(row["correct_decisive"])
         decisive_by_year[int(row["year"])][1] += 1
+        if row["result_decision"] == "penalties":
+            penalties_scored += 1
+            penalty_correct += int(row["correct_decisive"])
 
     summary = {
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "match_source": RESULTS_URL,
+        "shootout_source": SHOOTOUTS_URL,
         "population_source": f"World Bank indicator {POPULATION_INDICATOR}",
         "wealth_source": f"World Bank indicator {WEALTH_INDICATOR}",
         "climate_source": "embedded annual country mean temperature table",
         "ranking_source": ranking_source,
+        "result_mode": args.result_mode,
         "scope": {
             "tournament": "FIFA World Cup",
             "years": [START_YEAR, END_YEAR],
             "matches": len(predictions),
             "decisive_matches_scored": total,
             "draws_exported_not_scored": len(predictions) - total,
+            "penalty_shootout_matches_scored": penalties_scored,
+        },
+        "penalty_shootout_accuracy": {
+            "correct": penalty_correct,
+            "total": penalties_scored,
+            "accuracy": penalty_correct / penalties_scored if penalties_scored else None,
         },
         "optimized_weights": best_weights,
         "accuracy": accuracy,

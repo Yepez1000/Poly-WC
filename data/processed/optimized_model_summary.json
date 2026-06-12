@@ -1,10 +1,12 @@
 {
-  "created_at": "2026-06-12T19:21:47+00:00",
+  "created_at": "2026-06-12T19:48:46+00:00",
   "match_source": "https://raw.githubusercontent.com/martj42/international_results/master/results.csv",
+  "shootout_source": "https://raw.githubusercontent.com/martj42/international_results/master/shootouts.csv",
   "population_source": "World Bank indicator SP.POP.TOTL",
   "wealth_source": "World Bank indicator NY.GDP.PCAP.PP.CD",
   "climate_source": "embedded annual country mean temperature table",
   "ranking_source": "rolling pre-match strength rank fallback",
+  "result_mode": "advancement",
   "scope": {
     "tournament": "FIFA World Cup",
     "years": [
@@ -12,58 +14,64 @@
       2022
     ],
     "matches": 500,
-    "decisive_matches_scored": 382,
-    "draws_exported_not_scored": 118
+    "decisive_matches_scored": 409,
+    "draws_exported_not_scored": 91,
+    "penalty_shootout_matches_scored": 27
+  },
+  "penalty_shootout_accuracy": {
+    "correct": 16,
+    "total": 27,
+    "accuracy": 0.5925925925925926
   },
   "optimized_weights": {
-    "population": 0.12,
-    "climate": 0.03,
-    "wealth": 0.19,
-    "ranking": 0.66
+    "population": 0.01,
+    "climate": 0.05,
+    "wealth": 0.25,
+    "ranking": 0.69
   },
-  "accuracy": 0.7277486910994765,
-  "correct": 278,
-  "total": 382,
+  "accuracy": 0.7188264058679706,
+  "correct": 294,
+  "total": 409,
   "accuracy_by_year": {
     "1994": {
-      "correct": 29,
-      "total": 41,
-      "accuracy": 0.7073170731707317
+      "correct": 31,
+      "total": 44,
+      "accuracy": 0.7045454545454546
     },
     "1998": {
-      "correct": 31,
-      "total": 45,
-      "accuracy": 0.6888888888888889
+      "correct": 36,
+      "total": 48,
+      "accuracy": 0.75
     },
     "2002": {
-      "correct": 31,
-      "total": 48,
-      "accuracy": 0.6458333333333334
+      "correct": 32,
+      "total": 50,
+      "accuracy": 0.64
     },
     "2006": {
-      "correct": 40,
-      "total": 49,
-      "accuracy": 0.8163265306122449
+      "correct": 39,
+      "total": 53,
+      "accuracy": 0.7358490566037735
     },
     "2010": {
-      "correct": 35,
-      "total": 48,
-      "accuracy": 0.7291666666666666
+      "correct": 40,
+      "total": 50,
+      "accuracy": 0.8
     },
     "2014": {
-      "correct": 38,
-      "total": 51,
-      "accuracy": 0.7450980392156863
+      "correct": 39,
+      "total": 55,
+      "accuracy": 0.7090909090909091
     },
     "2018": {
-      "correct": 38,
-      "total": 51,
-      "accuracy": 0.7450980392156863
+      "correct": 39,
+      "total": 55,
+      "accuracy": 0.7090909090909091
     },
     "2022": {
-      "correct": 36,
-      "total": 49,
-      "accuracy": 0.7346938775510204
+      "correct": 38,
+      "total": 54,
+      "accuracy": 0.7037037037037037
     }
   }
 }

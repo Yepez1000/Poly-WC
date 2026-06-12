@@ -48,10 +48,18 @@ Run it with:
 python3 scripts/world_cup_quant_model.py
 ```
 
+By default, the quantitative pipeline uses `--result-mode advancement`, which
+joins the public `shootouts.csv` file and counts penalty shootout winners as the
+actual winner. To reproduce the older regulation-score-only behavior:
+
+```sh
+python3 scripts/world_cup_quant_model.py --result-mode regulation
+```
+
 For the finer optimization used in the current generated outputs:
 
 ```sh
-python3 scripts/world_cup_quant_model.py --step 0.01
+python3 scripts/world_cup_quant_model.py --step 0.01 --result-mode advancement
 ```
 
 If you have a historical FIFA ranking CSV with `rank_date`, `country_full`, and
@@ -68,14 +76,18 @@ fallback so the optimizer remains runnable. Outputs are written to:
 - `data/processed/world_cup_match_predictions.csv`
 - `data/processed/world_cup_team_match_features.csv`
 
-The current `--step 0.01` run exported 500 World Cup matches from 1994-2022 and
-scored the 382 decisive matches. The optimized decisive-match hit rate was
-72.775% with these weights:
+The current `--step 0.01 --result-mode advancement` run exported 500 World Cup
+matches from 1994-2022 and includes penalty shootout winners as advancement
+winners. It scored 409 decisive/advancement matches, including 27 penalty
+shootouts. The optimized hit rate was 71.883% with these weights:
 
-- Population: 12%
-- Climate: 3%
-- Wealth: 19%
-- Ranking: 66%
+- Population: 1%
+- Climate: 5%
+- Wealth: 25%
+- Ranking: 69%
+
+Penalty shootout matches alone were predicted correctly 16 times out of 27
+matches, or 59.259%.
 
 Important caveat: population and wealth are year-matched to each match year.
 Ranking is year-relevant when a historical FIFA ranking CSV is supplied; without
