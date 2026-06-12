@@ -1,0 +1,17 @@
+{
+  "created_at": "2026-06-12T20:44:57+00:00",
+  "source_page": "https://polymarket.com/sports/world-cup/games",
+  "events_found": 70,
+  "events_scored": 70,
+  "outcome_rows": 210,
+  "weights": {
+    "population": 0.01,
+    "climate": 0.05,
+    "wealth": 0.25,
+    "ranking": 0.69
+  },
+  "backtest_accuracy_used": 0.7188264058679706,
+  "bankroll": 1000.0,
+  "kelly_scale": 0.25,
+  "max_fraction_per_outcome": 0.02
+}

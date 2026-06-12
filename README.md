@@ -94,3 +94,74 @@ Ranking is year-relevant when a historical FIFA ranking CSV is supplied; without
 one, the script uses a pre-match rolling rank fallback. Climate is an embedded
 country mean-temperature input because a stable open annual country-temperature
 API was not available during this build.
+
+## Polymarket World Cup Trade Research
+
+The script `scripts/polymarket_world_cup_trader.py` fetches active public
+Polymarket 2026 FIFA World Cup markets and compares market prices with the
+backtested economic model.
+
+Run it with:
+
+```sh
+python3 scripts/polymarket_world_cup_trader.py --bankroll 1000 --simulations 20000
+```
+
+It currently analyzes team outright-winner and group-winner markets. The public
+market scan used for the current output did not expose individual match-winner
+markets, so the Monte Carlo layer simulates group play and an approximate
+32-team knockout tournament from the detected groups.
+
+Outputs:
+
+- `data/processed/polymarket_world_cup_trade_recommendations.csv`
+- `data/processed/polymarket_world_cup_portfolio_summary.json`
+
+The trading layer:
+
+- Uses the optimized advancement-mode weights from
+  `optimized_model_summary.json`.
+- Runs a Monte Carlo tournament simulation.
+- Shrinks model probabilities toward Polymarket prices using historical
+  backtest accuracy.
+- Computes edge, expected value per dollar, fractional Kelly size, max loss, and
+  profit if the trade wins.
+- Applies conservative defaults: 25% Kelly scale, 2% max per trade, 25% max
+  portfolio deployment, 2% minimum edge, 3% minimum EV, and $5 minimum
+  deployment.
+
+This is a research tool only. It does not place trades.
+
+## Individual Match Moneyline Sheet
+
+The script `scripts/polymarket_world_cup_games.py` targets the individual
+moneyline games page:
+
+```sh
+python3 scripts/polymarket_world_cup_games.py --bankroll 1000
+```
+
+It fetches the current game slugs from
+`https://polymarket.com/sports/world-cup/games`, including the full
+client-side `parentToChildEventIds` list, pulls each match event from
+Polymarket Gamma, and scores the three regular-time outcomes:
+
+- Team A wins
+- Draw
+- Team B wins
+
+The generated CSV is:
+
+- `data/processed/polymarket_world_cup_games_moneyline.csv`
+
+The workbook builder exports:
+
+```sh
+node scripts/build_world_cup_games_workbook.mjs
+```
+
+Final workbook:
+
+- `outputs/world_cup_games/world_cup_individual_moneyline_model.xlsx`
+
+The latest run found 70 individual matches and exported 210 outcome rows.

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import itertools
 import json
 import math
@@ -50,17 +51,24 @@ COUNTRY_ISO3 = {
     "Austria": "AUT",
     "Belgium": "BEL",
     "Bolivia": "BOL",
+    "Bosnia-Herzegovina": "BIH",
     "Bosnia and Herzegovina": "BIH",
     "Brazil": "BRA",
     "Bulgaria": "BGR",
     "Cameroon": "CMR",
     "Canada": "CAN",
+    "Cabo Verde": "CPV",
+    "Cape Verde": "CPV",
     "Chile": "CHL",
     "China": "CHN",
     "Colombia": "COL",
     "Costa Rica": "CRI",
     "Croatia": "HRV",
+    "Curaçao": "CUW",
+    "Curacao": "CUW",
+    "Congo DR": "COD",
     "Czech Republic": "CZE",
+    "Czechia": "CZE",
     "Denmark": "DNK",
     "Ecuador": "ECU",
     "Egypt": "EGY",
@@ -70,12 +78,15 @@ COUNTRY_ISO3 = {
     "Ghana": "GHA",
     "Greece": "GRC",
     "Honduras": "HND",
+    "Haiti": "HTI",
     "Iceland": "ISL",
     "Iran": "IRN",
+    "Iraq": "IRQ",
     "Italy": "ITA",
     "Ivory Coast": "CIV",
     "Jamaica": "JAM",
     "Japan": "JPN",
+    "Jordan": "JOR",
     "Mexico": "MEX",
     "Morocco": "MAR",
     "Netherlands": "NLD",
@@ -107,6 +118,9 @@ COUNTRY_ISO3 = {
     "Togo": "TGO",
     "Trinidad and Tobago": "TTO",
     "Turkey": "TUR",
+    "Turkiye": "TUR",
+    "Türkiye": "TUR",
+    "Uzbekistan": "UZB",
     "Ukraine": "UKR",
     "United States": "USA",
     "Uruguay": "URY",
@@ -124,17 +138,24 @@ CLIMATE_C = {
     "Austria": 6.4,
     "Belgium": 10.7,
     "Bolivia": 20.0,
+    "Bosnia-Herzegovina": 10.9,
     "Bosnia and Herzegovina": 10.9,
     "Brazil": 25.0,
     "Bulgaria": 10.6,
     "Cameroon": 24.6,
     "Canada": -5.4,
+    "Cabo Verde": 24.0,
+    "Cape Verde": 24.0,
     "Chile": 8.5,
     "China": 7.5,
     "Colombia": 24.8,
     "Costa Rica": 24.8,
     "Croatia": 11.9,
+    "Curaçao": 28.0,
+    "Curacao": 28.0,
+    "Congo DR": 24.0,
     "Czech Republic": 7.6,
+    "Czechia": 7.6,
     "Denmark": 8.3,
     "Ecuador": 21.9,
     "Egypt": 22.1,
@@ -144,12 +165,15 @@ CLIMATE_C = {
     "Ghana": 27.2,
     "Greece": 15.4,
     "Honduras": 23.5,
+    "Haiti": 24.9,
     "Iceland": 1.8,
     "Iran": 17.3,
+    "Iraq": 21.4,
     "Italy": 13.5,
     "Ivory Coast": 26.4,
     "Jamaica": 25.7,
     "Japan": 14.6,
+    "Jordan": 18.3,
     "Mexico": 21.0,
     "Morocco": 18.3,
     "Netherlands": 10.4,
@@ -181,6 +205,9 @@ CLIMATE_C = {
     "Togo": 27.2,
     "Trinidad and Tobago": 25.8,
     "Turkey": 11.1,
+    "Turkiye": 11.1,
+    "Türkiye": 11.1,
+    "Uzbekistan": 12.0,
     "Ukraine": 8.3,
     "United States": 8.6,
     "Uruguay": 17.6,
@@ -204,6 +231,14 @@ ALIASES = {
     "IR Iran": "Iran",
     "Côte d'Ivoire": "Ivory Coast",
     "Cote d'Ivoire": "Ivory Coast",
+    "Czechia": "Czech Republic",
+    "Cabo Verde": "Cape Verde",
+    "Bosnia-Herzegovina": "Bosnia and Herzegovina",
+    "Democratic Republic of Congo": "Congo DR",
+    "DR Congo": "Congo DR",
+    "Curacao": "Curaçao",
+    "Turkiye": "Turkey",
+    "Türkiye": "Turkey",
     "Republic of Ireland": "Republic of Ireland",
     "Ireland": "Republic of Ireland",
     "Serbia and Montenegro": "Serbia",
@@ -316,6 +351,8 @@ def read_all_results_until(end_year: int) -> list[dict]:
             match_date = datetime.strptime(row["date"], "%Y-%m-%d").date()
             if match_date.year > end_year:
                 continue
+            if row["home_score"] == "NA" or row["away_score"] == "NA":
+                continue
             rows.append(
                 {
                     "date": match_date,
@@ -331,7 +368,8 @@ def read_all_results_until(end_year: int) -> list[dict]:
 def world_bank_series(indicator: str, countries: set[str]) -> dict[str, dict[int, float]]:
     iso_codes = sorted({COUNTRY_ISO3[country] for country in countries if country in COUNTRY_ISO3})
     url = WORLD_BANK_URL.format(countries=";".join(iso_codes), indicator=indicator)
-    cache_name = f"world_bank_{indicator}.json"
+    country_hash = hashlib.sha1(";".join(iso_codes).encode("utf-8")).hexdigest()[:10]
+    cache_name = f"world_bank_{indicator}_{country_hash}.json"
     path = fetch(url, RAW / cache_name)
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, list) or len(payload) < 2:

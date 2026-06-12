@@ -1,0 +1,107 @@
+{
+  "created_at": "2026-06-12T20:15:24+00:00",
+  "source": "https://gamma-api.polymarket.com/markets",
+  "backtest_accuracy_used": 0.7188264058679706,
+  "probability_calibration": "calibrated_probability = alpha * model_probability + (1 - alpha) * polymarket_price, alpha=(accuracy-0.5)/0.5",
+  "weights": {
+    "population": 0.01,
+    "climate": 0.05,
+    "wealth": 0.25,
+    "ranking": 0.69
+  },
+  "simulations": 20000,
+  "bankroll": 1000.0,
+  "kelly_scale": 0.25,
+  "max_fraction_per_trade": 0.02,
+  "max_total_fraction": 0.25,
+  "min_edge": 0.02,
+  "min_ev": 0.03,
+  "min_deploy": 5.0,
+  "markets_analyzed": 96,
+  "groups_detected": {
+    "A": [
+      "Czech Republic",
+      "Mexico",
+      "South Africa",
+      "South Korea"
+    ],
+    "B": [
+      "Bosnia and Herzegovina",
+      "Canada",
+      "Qatar",
+      "Switzerland"
+    ],
+    "C": [
+      "Brazil",
+      "Haiti",
+      "Morocco",
+      "Scotland"
+    ],
+    "D": [
+      "Australia",
+      "Paraguay",
+      "Turkey",
+      "United States"
+    ],
+    "E": [
+      "Cura\u00e7ao",
+      "Ecuador",
+      "Germany",
+      "Ivory Coast"
+    ],
+    "F": [
+      "Japan",
+      "Netherlands",
+      "Sweden",
+      "Tunisia"
+    ],
+    "G": [
+      "Belgium",
+      "Egypt",
+      "Iran",
+      "New Zealand"
+    ],
+    "H": [
+      "Cape Verde",
+      "Saudi Arabia",
+      "Spain",
+      "Uruguay"
+    ],
+    "I": [
+      "France",
+      "Iraq",
+      "Norway",
+      "Senegal"
+    ],
+    "J": [
+      "Algeria",
+      "Argentina",
+      "Austria",
+      "Jordan"
+    ],
+    "K": [
+      "Colombia",
+      "Congo DR",
+      "Portugal",
+      "Uzbekistan"
+    ],
+    "L": [
+      "Croatia",
+      "England",
+      "Ghana",
+      "Panama"
+    ]
+  },
+  "portfolio_risk": {
+    "active_trades": 25,
+    "total_deployed": 233.66,
+    "expected_profit": 88.48,
+    "expected_return_on_deployed": 0.37866,
+    "probability_of_loss": 0.10365,
+    "p05_profit": -18.65,
+    "median_profit": 78.94,
+    "p95_profit": 217.0,
+    "worst_case_simulated": -106.72,
+    "best_case_simulated": 270.68
+  }
+}
