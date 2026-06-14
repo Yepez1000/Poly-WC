@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-06-14T20:03:04+00:00",
+  "created_at": "2026-06-14T20:14:40+00:00",
   "input_file": "/Users/edgaryepez/Developer/Projects/Current/Poly-WC/data/processed/polymarket_world_cup_games_moneyline.csv",
   "simulations_per_probability_source": 20000,
   "recommended_trades": 28,
@@ -9,6 +9,11 @@
     "model": "Uses the model probability of the deterministic predicted six-outcome trade."
   },
   "payout": "For each share bought at price x: win = 1-x, lose = -x.",
+  "charts": {
+    "final_pnl_distribution": "/Users/edgaryepez/Developer/Projects/Current/Poly-WC/outputs/world_cup_games/montecarlo_charts/final_pnl_distribution.png",
+    "cumulative_pnl_paths": "/Users/edgaryepez/Developer/Projects/Current/Poly-WC/outputs/world_cup_games/montecarlo_charts/cumulative_pnl_paths.png",
+    "terminal_pnl_boxplot": "/Users/edgaryepez/Developer/Projects/Current/Poly-WC/outputs/world_cup_games/montecarlo_charts/terminal_pnl_boxplot.png"
+  },
   "summary": {
     "polymarket": {
       "mean": -0.12613665054871434,

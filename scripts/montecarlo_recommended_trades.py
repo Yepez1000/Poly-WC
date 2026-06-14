@@ -17,6 +17,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import random
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,7 +25,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "data" / "processed"
+CHART_DIR = ROOT / "outputs" / "world_cup_games" / "montecarlo_charts"
 INPUT_CSV = PROCESSED / "polymarket_world_cup_games_moneyline.csv"
+os.environ.setdefault("MPLCONFIGDIR", str(ROOT / ".matplotlib_cache"))
+os.environ.setdefault("XDG_CACHE_HOME", str(ROOT / ".cache"))
+os.environ.setdefault("FC_CACHEDIR", str(ROOT / ".fontconfig_cache"))
 
 
 def read_recommended_trades() -> list[dict]:
@@ -95,13 +100,17 @@ def histogram(values: list[float], bins: int) -> list[dict]:
     ]
 
 
-def simulate(trades: list[dict], simulations: int, seed: int, probability_source: str) -> tuple[list[dict], list[float]]:
+def simulate(
+    trades: list[dict], simulations: int, seed: int, probability_source: str
+) -> tuple[list[dict], list[float], list[list[float]]]:
     rng = random.Random(seed)
     paths = []
     finals = []
+    cumulative_paths = []
 
     for simulation_id in range(1, simulations + 1):
         cumulative = 0.0
+        cumulative_path = []
         row = {"probability_source": probability_source, "simulation_id": simulation_id}
         for trade_index, trade in enumerate(trades, start=1):
             price = float(trade["polymarket_price_x"])
@@ -111,13 +120,103 @@ def simulate(trades: list[dict], simulations: int, seed: int, probability_source
             win = rng.random() < probability
             pnl = shares * (1 - price) if win else shares * (-price)
             cumulative += pnl
+            cumulative_path.append(cumulative)
             row[f"trade_{trade_index:02d}_pnl"] = round(pnl, 6)
             row[f"trade_{trade_index:02d}_cum_pnl"] = round(cumulative, 6)
         row["final_pnl"] = round(cumulative, 6)
         paths.append(row)
         finals.append(cumulative)
+        cumulative_paths.append(cumulative_path)
 
-    return paths, finals
+    return paths, finals, cumulative_paths
+
+
+def normal_pdf(x: float, mean: float, stdev: float) -> float:
+    if stdev <= 0:
+        return 0.0
+    return math.exp(-0.5 * ((x - mean) / stdev) ** 2) / (stdev * math.sqrt(2 * math.pi))
+
+
+def plot_results(
+    finals_by_source: dict[str, list[float]],
+    cumulative_paths_by_source: dict[str, list[list[float]]],
+    summaries: dict,
+    sample_paths: int,
+) -> dict[str, str]:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    CHART_DIR.mkdir(parents=True, exist_ok=True)
+    chart_paths = {
+        "final_pnl_distribution": CHART_DIR / "final_pnl_distribution.png",
+        "cumulative_pnl_paths": CHART_DIR / "cumulative_pnl_paths.png",
+        "terminal_pnl_boxplot": CHART_DIR / "terminal_pnl_boxplot.png",
+    }
+
+    colors = {"polymarket": "#2563eb", "model": "#dc2626"}
+    sources = ["polymarket", "model"]
+
+    plt.style.use("seaborn-v0_8-whitegrid")
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=False)
+    all_finals = [value for values in finals_by_source.values() for value in values]
+    x_min, x_max = min(all_finals), max(all_finals)
+    x_points = [x_min + (x_max - x_min) * i / 300 for i in range(301)]
+    for axis, source in zip(axes, sources):
+        values = finals_by_source[source]
+        stats = summaries[source]
+        axis.hist(values, bins=40, density=True, alpha=0.55, color=colors[source], label="Simulated P&L")
+        normal_values = [normal_pdf(x, stats["mean"], stats["stdev"]) for x in x_points]
+        axis.plot(x_points, normal_values, color="#111827", linewidth=2, label="Fitted normal")
+        axis.axvline(stats["mean"], color=colors[source], linestyle="--", linewidth=2, label="Mean")
+        axis.axvline(0, color="#4b5563", linestyle=":", linewidth=1.5, label="Breakeven")
+        axis.set_title(f"{source.title()} odds: terminal P&L distribution")
+        axis.set_xlabel("Final portfolio P&L ($)")
+        axis.set_ylabel("Density")
+        axis.legend()
+    fig.suptitle("Monte Carlo terminal earnings distributions", fontsize=16, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(chart_paths["final_pnl_distribution"], dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
+    for axis, source in zip(axes, sources):
+        paths = cumulative_paths_by_source[source]
+        if not paths:
+            continue
+        step_count = len(paths[0])
+        xs = list(range(1, step_count + 1))
+        stride = max(1, len(paths) // sample_paths)
+        sampled_paths = paths[::stride][:sample_paths]
+        for path_values in sampled_paths:
+            axis.plot(xs, path_values, color=colors[source], alpha=0.04, linewidth=0.8)
+        mean_path = [sum(path_values[i] for path_values in paths) / len(paths) for i in range(step_count)]
+        axis.plot(xs, mean_path, color="#111827", linewidth=2.4, label="Mean path")
+        axis.axhline(0, color="#4b5563", linestyle=":", linewidth=1.5)
+        axis.set_title(f"{source.title()} odds: cumulative P&L paths")
+        axis.set_xlabel("Recommended trade sequence")
+        axis.set_ylabel("Cumulative P&L ($)")
+        axis.legend()
+    fig.suptitle("Monte Carlo cumulative portfolio paths", fontsize=16, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(chart_paths["cumulative_pnl_paths"], dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    fig, axis = plt.subplots(figsize=(9, 6))
+    data = [finals_by_source[source] for source in sources]
+    box = axis.boxplot(data, tick_labels=[source.title() for source in sources], patch_artist=True, showfliers=False)
+    for patch, source in zip(box["boxes"], sources):
+        patch.set_facecolor(colors[source])
+        patch.set_alpha(0.55)
+    axis.axhline(0, color="#4b5563", linestyle=":", linewidth=1.5)
+    axis.set_title("Terminal P&L risk profile")
+    axis.set_ylabel("Final portfolio P&L ($)")
+    fig.tight_layout()
+    fig.savefig(chart_paths["terminal_pnl_boxplot"], dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+    return {key: str(path) for key, path in chart_paths.items()}
 
 
 def write_csv(path: Path, rows: list[dict], fieldnames: list[str] | None = None) -> None:
@@ -137,6 +236,7 @@ def main() -> None:
     parser.add_argument("--simulations", type=int, default=20000)
     parser.add_argument("--seed", type=int, default=20260614)
     parser.add_argument("--bins", type=int, default=40)
+    parser.add_argument("--plot-path-sample", type=int, default=500)
     args = parser.parse_args()
 
     trades = read_recommended_trades()
@@ -170,12 +270,16 @@ def main() -> None:
     all_paths = []
     summaries = {}
     histogram_rows = []
+    finals_by_source = {}
+    cumulative_paths_by_source = {}
     for offset, source in enumerate(["polymarket", "model"]):
-        paths, finals = simulate(trades, args.simulations, args.seed + offset * 100_000, source)
+        paths, finals, cumulative_paths = simulate(trades, args.simulations, args.seed + offset * 100_000, source)
         all_paths.extend(paths)
         summary = summarize(finals)
         summary["expected_return_on_deployed"] = summary["mean"] / sum(float(trade["deploy_amount"]) for trade in trades)
         summaries[source] = summary
+        finals_by_source[source] = finals
+        cumulative_paths_by_source[source] = cumulative_paths
         for bin_row in histogram(finals, args.bins):
             histogram_rows.append({"probability_source": source, **bin_row})
 
@@ -187,6 +291,7 @@ def main() -> None:
     write_csv(PROCESSED / "recommended_trade_montecarlo_inputs.csv", trade_inputs)
     write_csv(PROCESSED / "recommended_trade_montecarlo_paths.csv", all_paths, path_fieldnames)
     write_csv(PROCESSED / "recommended_trade_montecarlo_histogram.csv", histogram_rows)
+    chart_paths = plot_results(finals_by_source, cumulative_paths_by_source, summaries, args.plot_path_sample)
 
     summary = {
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -199,6 +304,7 @@ def main() -> None:
             "model": "Uses the model probability of the deterministic predicted six-outcome trade.",
         },
         "payout": "For each share bought at price x: win = 1-x, lose = -x.",
+        "charts": chart_paths,
         "summary": summaries,
     }
     (PROCESSED / "recommended_trade_montecarlo_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -215,6 +321,8 @@ def main() -> None:
         )
     print(f"Wrote {PROCESSED / 'recommended_trade_montecarlo_summary.json'}")
     print(f"Wrote {PROCESSED / 'recommended_trade_montecarlo_paths.csv'}")
+    for chart_name, chart_path in chart_paths.items():
+        print(f"Wrote {chart_name}: {chart_path}")
 
 
 if __name__ == "__main__":
