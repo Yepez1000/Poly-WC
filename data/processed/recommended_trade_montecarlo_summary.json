@@ -1,0 +1,46 @@
+{
+  "created_at": "2026-06-14T20:03:04+00:00",
+  "input_file": "/Users/edgaryepez/Developer/Projects/Current/Poly-WC/data/processed/polymarket_world_cup_games_moneyline.csv",
+  "simulations_per_probability_source": 20000,
+  "recommended_trades": 28,
+  "total_deployed": 2086.68,
+  "probability_sources": {
+    "polymarket": "Uses the trade contract price as the probability of winning.",
+    "model": "Uses the model probability of the deterministic predicted six-outcome trade."
+  },
+  "payout": "For each share bought at price x: win = 1-x, lose = -x.",
+  "summary": {
+    "polymarket": {
+      "mean": -0.12613665054871434,
+      "stdev": 300.81851892959463,
+      "min": -1209.9417618067573,
+      "p01": -724.1871745928556,
+      "p05": -506.946742287822,
+      "p10": -393.1875179103539,
+      "median": 6.194538197944375,
+      "p90": 384.4106920753422,
+      "p95": 481.6679563263411,
+      "p99": 637.5489521909541,
+      "max": 888.9356626048019,
+      "probability_loss": 0.49065,
+      "probability_profit": 0.50935,
+      "expected_return_on_deployed": -6.0448487812560794e-05
+    },
+    "model": {
+      "mean": 447.19139692569684,
+      "stdev": 226.25753431177657,
+      "min": -631.9463294911643,
+      "p01": -152.55172583352112,
+      "p05": 42.998361675469255,
+      "p10": 146.3242990637368,
+      "median": 467.6415637912827,
+      "p90": 725.0871449352973,
+      "p95": 784.7477431417147,
+      "p99": 888.9356626048019,
+      "max": 888.9356626048019,
+      "probability_loss": 0.03775,
+      "probability_profit": 0.96225,
+      "expected_return_on_deployed": 0.2143076067847954
+    }
+  }
+}

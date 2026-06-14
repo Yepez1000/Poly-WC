@@ -25,17 +25,16 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from polymarket_world_cup_trader import (  # noqa: E402
-    conservative_probability,
     current_team_features,
     kelly_fraction,
-    match_probs,
 )
+from optimize_six_outcome_model import deterministic_pick, probabilities, edge_bin  # noqa: E402
 from world_cup_quant_model import canonical_country  # noqa: E402
 
 
 GAMES_PAGE_URL = "https://polymarket.com/sports/world-cup/games"
 GAMMA_EVENT_URL = "https://gamma-api.polymarket.com/events/slug/{slug}"
-SUMMARY_PATH = ROOT / "data" / "processed" / "optimized_model_summary.json"
+SUMMARY_PATH = ROOT / "data" / "processed" / "six_outcome_optimized_summary.json"
 OUT_DIR = ROOT / "data" / "processed"
 
 
@@ -62,13 +61,17 @@ def decode_json_list(value):
     return json.loads(value or "[]")
 
 
-def yes_price(market: dict) -> float | None:
+def yes_no_prices(market: dict) -> tuple[float | None, float | None]:
     outcomes = decode_json_list(market.get("outcomes"))
     prices = [float(price) for price in decode_json_list(market.get("outcomePrices"))]
+    yes = None
+    no = None
     for outcome, price in zip(outcomes, prices):
         if outcome == "Yes":
-            return price
-    return None
+            yes = price
+        elif outcome == "No":
+            no = price
+    return yes, no
 
 
 def slugs_from_games_page() -> list[str]:
@@ -116,13 +119,34 @@ def implied_no_vig(prices: dict[str, float]) -> dict[str, float]:
     return {key: value / total for key, value in prices.items()}
 
 
-def load_settings() -> tuple[dict[str, float], float]:
+def load_settings() -> tuple[dict, float]:
     summary = json.loads(SUMMARY_PATH.read_text(encoding="utf-8"))
-    return summary["optimized_weights"], float(summary["accuracy"])
+    return summary["optimized_parameters"], float(summary["metrics"]["pooled_accuracy"])
+
+
+def trade_contract(predicted_outcome: str, team_a: str, team_b: str) -> tuple[str, str]:
+    if predicted_outcome == "team_a_win":
+        return team_a, "YES"
+    if predicted_outcome == "draw":
+        return "Draw", "YES"
+    if predicted_outcome == "team_b_win":
+        return team_b, "YES"
+    if predicted_outcome == "team_a_loss":
+        return team_a, "NO"
+    if predicted_outcome == "no_draw":
+        return "Draw", "NO"
+    if predicted_outcome == "team_b_loss":
+        return team_b, "NO"
+    raise ValueError(f"Unknown predicted outcome: {predicted_outcome}")
+
+
+def expected_value(probability: float, price: float) -> float:
+    return probability * (1 - price) + (1 - probability) * (-price)
 
 
 def analyze_games(bankroll: float, kelly_scale: float, max_fraction: float) -> tuple[list[dict], dict]:
-    weights, backtest_accuracy = load_settings()
+    optimized, backtest_accuracy = load_settings()
+    weights = optimized["economic_weights"]
     slugs = slugs_from_games_page()
     events = [fetch_json(GAMMA_EVENT_URL.format(slug=slug)) for slug in slugs]
 
@@ -136,9 +160,27 @@ def analyze_games(bankroll: float, kelly_scale: float, max_fraction: float) -> t
     features = current_team_features(teams, weights)
     rows = []
     for event, team_a, team_b in parsed_events:
-        p_a, p_draw, p_b = match_probs(team_a, team_b, features)
-        model_probs = {team_a: p_a, "Draw": p_draw, team_b: p_b}
-        market_prices = {}
+        rating_edge = features[team_a]["rating"] - features[team_b]["rating"]
+        params = {
+            "draw_baseline": optimized["draw_baseline"],
+            "draw_decay": optimized["draw_decay"],
+            "draw_min": optimized["draw_min"],
+            "draw_max": optimized["draw_max"],
+            "logistic_slope": optimized["logistic_slope"],
+        }
+        model_probs = probabilities(rating_edge, params)
+        predicted_outcome = deterministic_pick(model_probs)
+        contract_outcome, contract_side = trade_contract(predicted_outcome, team_a, team_b)
+        outcome_labels = {
+            "team_a_win": team_a,
+            "draw": "Draw",
+            "team_b_win": team_b,
+            "team_a_loss": f"{team_a} NO",
+            "no_draw": "Draw NO",
+            "team_b_loss": f"{team_b} NO",
+        }
+        yes_prices = {}
+        no_prices = {}
         market_ids = {}
         market_questions = {}
         best_bids = {}
@@ -148,78 +190,71 @@ def analyze_games(bankroll: float, kelly_scale: float, max_fraction: float) -> t
             outcome = classify_market(market, team_a, team_b)
             if not outcome:
                 continue
-            price = yes_price(market)
-            if price is None:
+            yes, no = yes_no_prices(market)
+            if yes is None or no is None:
                 continue
-            market_prices[outcome] = price
+            yes_prices[outcome] = yes
+            no_prices[outcome] = no
             market_ids[outcome] = market.get("id")
             market_questions[outcome] = market.get("question")
             best_bids[outcome] = market.get("bestBid")
             best_asks[outcome] = market.get("bestAsk")
 
-        if set(market_prices) != {team_a, "Draw", team_b}:
+        if set(yes_prices) != {team_a, "Draw", team_b}:
             continue
 
-        no_vig = implied_no_vig(market_prices)
-        edge_rows = []
-        for outcome in (team_a, "Draw", team_b):
-            model_probability = model_probs[outcome]
-            market_probability = market_prices[outcome]
-            calibrated_probability = conservative_probability(model_probability, market_probability, backtest_accuracy)
-            edge = calibrated_probability - market_probability
-            ev_per_dollar = calibrated_probability / market_probability - 1 if market_probability > 0 else 0
-            full_kelly = kelly_fraction(calibrated_probability, market_probability)
-            deploy_fraction = min(max_fraction, full_kelly * kelly_scale) if edge > 0 else 0
-            deploy_amount = bankroll * deploy_fraction
-            edge_rows.append(
-                {
-                    "outcome": outcome,
-                    "model_probability": model_probability,
-                    "calibrated_probability": calibrated_probability,
-                    "market_price": market_probability,
-                    "edge": edge,
-                    "ev_per_dollar": ev_per_dollar,
-                    "full_kelly_fraction": full_kelly,
-                    "deploy_fraction": deploy_fraction,
-                    "deploy_amount": deploy_amount,
-                    "profit_if_win": deploy_amount * (1 / market_probability - 1) if deploy_amount else 0,
-                }
-            )
-
-        best_trade = max(edge_rows, key=lambda row: row["ev_per_dollar"])
-        model_pick = max(model_probs.items(), key=lambda item: item[1])[0]
-        market_pick = max(no_vig.items(), key=lambda item: item[1])[0]
-        for outcome_row in edge_rows:
-            outcome = outcome_row["outcome"]
-            rows.append(
-                {
-                    "event_id": event.get("id"),
-                    "slug": event.get("slug"),
-                    "match": event.get("title"),
-                    "start_time_utc": event.get("endDate"),
-                    "team_a": team_a,
-                    "team_b": team_b,
-                    "outcome": outcome,
-                    "market_id": market_ids[outcome],
-                    "market_question": market_questions[outcome],
-                    "market_yes_price": round(outcome_row["market_price"], 6),
-                    "market_no_vig_probability": round(no_vig[outcome], 6),
-                    "model_probability": round(outcome_row["model_probability"], 6),
-                    "calibrated_probability": round(outcome_row["calibrated_probability"], 6),
-                    "edge": round(outcome_row["edge"], 6),
-                    "ev_per_dollar": round(outcome_row["ev_per_dollar"], 6),
-                    "full_kelly_fraction": round(outcome_row["full_kelly_fraction"], 6),
-                    "deploy_fraction": round(outcome_row["deploy_fraction"], 6),
-                    "deploy_amount": round(outcome_row["deploy_amount"], 2),
-                    "max_loss": round(outcome_row["deploy_amount"], 2),
-                    "profit_if_win": round(outcome_row["profit_if_win"], 2),
-                    "best_bid": best_bids[outcome],
-                    "best_ask": best_asks[outcome],
-                    "model_pick": model_pick,
-                    "market_pick": market_pick,
-                    "recommended": "YES" if outcome == best_trade["outcome"] and best_trade["edge"] > 0 else "PASS",
-                }
-            )
+        market_yes_no_vig = implied_no_vig(yes_prices)
+        trade_price = yes_prices[contract_outcome] if contract_side == "YES" else no_prices[contract_outcome]
+        ev = expected_value(backtest_accuracy, trade_price)
+        full_kelly = kelly_fraction(backtest_accuracy, trade_price)
+        deploy_fraction = min(max_fraction, full_kelly * kelly_scale) if ev > 0 else 0
+        deploy_amount = bankroll * deploy_fraction
+        model_pick_3way = max(
+            [(team_a, model_probs["team_a_win"]), ("Draw", model_probs["draw"]), (team_b, model_probs["team_b_win"])],
+            key=lambda item: item[1],
+        )[0]
+        market_pick = max(market_yes_no_vig.items(), key=lambda item: item[1])[0]
+        rows.append(
+            {
+                "event_id": event.get("id"),
+                "slug": event.get("slug"),
+                "match": event.get("title"),
+                "start_time_utc": event.get("endDate"),
+                "team_a": team_a,
+                "team_b": team_b,
+                "predicted_outcome": predicted_outcome,
+                "predicted_trade": outcome_labels[predicted_outcome],
+                "contract_outcome": contract_outcome,
+                "contract_side": contract_side,
+                "market_id": market_ids[contract_outcome],
+                "market_question": market_questions[contract_outcome],
+                "polymarket_price_x": round(trade_price, 6),
+                "backtest_accuracy_p": round(backtest_accuracy, 6),
+                "expected_value": round(ev, 6),
+                "expected_value_simplified": round(backtest_accuracy - trade_price, 6),
+                "profit_if_win_per_share": round(1 - trade_price, 6),
+                "loss_if_lose_per_share": round(-trade_price, 6),
+                "full_kelly_fraction": round(full_kelly, 6),
+                "deploy_fraction": round(deploy_fraction, 6),
+                "deploy_amount": round(deploy_amount, 2),
+                "max_loss": round(deploy_amount, 2),
+                "profit_if_win": round(deploy_amount * (1 / trade_price - 1), 2) if deploy_amount else 0.0,
+                "rating_edge": round(rating_edge, 6),
+                "abs_rating_edge": round(abs(rating_edge), 6),
+                "rating_edge_bin": edge_bin(abs(rating_edge)),
+                "team_a_win_probability": round(model_probs["team_a_win"], 6),
+                "draw_probability": round(model_probs["draw"], 6),
+                "team_b_win_probability": round(model_probs["team_b_win"], 6),
+                "team_a_loss_probability": round(model_probs["team_a_loss"], 6),
+                "no_draw_probability": round(model_probs["no_draw"], 6),
+                "team_b_loss_probability": round(model_probs["team_b_loss"], 6),
+                "model_pick_3way": model_pick_3way,
+                "market_pick_3way": market_pick,
+                "best_bid": best_bids[contract_outcome],
+                "best_ask": best_asks[contract_outcome],
+                "recommended": "YES" if ev > 0 else "PASS",
+            }
+        )
 
     summary = {
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -229,6 +264,9 @@ def analyze_games(bankroll: float, kelly_scale: float, max_fraction: float) -> t
         "outcome_rows": len(rows),
         "weights": weights,
         "backtest_accuracy_used": backtest_accuracy,
+        "ev_formula": "E = p * (1 - x) + (1 - p) * (-x); simplified E = p - x",
+        "prediction_source": "deterministic six-outcome model; only the predicted outcome is evaluated",
+        "six_outcome_parameters": optimized,
         "bankroll": bankroll,
         "kelly_scale": kelly_scale,
         "max_fraction_per_outcome": max_fraction,

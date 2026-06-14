@@ -144,11 +144,24 @@ python3 scripts/polymarket_world_cup_games.py --bankroll 1000
 It fetches the current game slugs from
 `https://polymarket.com/sports/world-cup/games`, including the full
 client-side `parentToChildEventIds` list, pulls each match event from
-Polymarket Gamma, and scores the three regular-time outcomes:
+Polymarket Gamma, and applies the deterministic six-outcome model:
 
 - Team A wins
 - Draw
 - Team B wins
+- Team A loss / Team A does not win
+- No draw
+- Team B loss / Team B does not win
+
+Only the model-predicted outcome is evaluated for each match. Expected value is
+computed as:
+
+```text
+E = p * (1 - x) + (1 - p) * (-x)
+```
+
+where `p` is the six-outcome backtest accuracy and `x` is the Polymarket price
+for the predicted contract. This simplifies to `E = p - x`.
 
 The generated CSV is:
 
@@ -164,4 +177,5 @@ Final workbook:
 
 - `outputs/world_cup_games/world_cup_individual_moneyline_model.xlsx`
 
-The latest run found 70 individual matches and exported 210 outcome rows.
+The latest run found 63 currently active individual matches and exported 63
+predicted-trade rows.

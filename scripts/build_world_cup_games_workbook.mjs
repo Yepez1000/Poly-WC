@@ -74,17 +74,17 @@ const matchSummary = Object.values(
       acc[row.match] = {
         match: row.match,
         start_time_utc: row.start_time_utc,
-        model_pick: row.model_pick,
-        market_pick: row.market_pick,
-        best_outcome: row.recommended === "YES" ? row.outcome : "",
-        best_edge: row.recommended === "YES" ? Number(row.edge) : -999,
-        best_ev: row.recommended === "YES" ? Number(row.ev_per_dollar) : -999,
+        model_pick: row.predicted_trade,
+        market_pick: row.market_pick_3way,
+        best_outcome: row.recommended === "YES" ? `${row.contract_side} ${row.contract_outcome}` : "",
+        best_edge: row.recommended === "YES" ? Number(row.expected_value) : -999,
+        best_ev: row.recommended === "YES" ? Number(row.expected_value) : -999,
         deploy_amount: row.recommended === "YES" ? Number(row.deploy_amount) : 0,
       };
-    } else if (row.recommended === "YES" && Number(row.ev_per_dollar) > acc[row.match].best_ev) {
-      acc[row.match].best_outcome = row.outcome;
-      acc[row.match].best_edge = Number(row.edge);
-      acc[row.match].best_ev = Number(row.ev_per_dollar);
+    } else if (row.recommended === "YES" && Number(row.expected_value) > acc[row.match].best_ev) {
+      acc[row.match].best_outcome = `${row.contract_side} ${row.contract_outcome}`;
+      acc[row.match].best_edge = Number(row.expected_value);
+      acc[row.match].best_ev = Number(row.expected_value);
       acc[row.match].deploy_amount = Number(row.deploy_amount);
     }
     return acc;
@@ -96,8 +96,7 @@ rows.sort((a, b) => {
   if (dateCompare !== 0) return dateCompare;
   const matchCompare = a.match.localeCompare(b.match);
   if (matchCompare !== 0) return matchCompare;
-  const order = { [a.team_a]: 0, Draw: 1, [a.team_b]: 2 };
-  return (order[a.outcome] ?? 9) - (order[b.outcome] ?? 9);
+  return a.predicted_trade.localeCompare(b.predicted_trade);
 });
 
 const workbook = Workbook.create();
@@ -114,13 +113,14 @@ writeBlock(summarySheet, "A1", [
   ["Outcome rows", summary.outcome_rows],
   ["Backtest accuracy used", pct(summary.backtest_accuracy_used)],
   ["Weights", `Population ${pct(summary.weights.population)}, Climate ${pct(summary.weights.climate)}, Wealth ${pct(summary.weights.wealth)}, Ranking ${pct(summary.weights.ranking)}`],
+  ["EV formula", summary.ev_formula],
   ["Bankroll", money(summary.bankroll)],
   ["Kelly scale", pct(summary.kelly_scale)],
   ["Max fraction per outcome", pct(summary.max_fraction_per_outcome)],
 ]);
 
 writeBlock(summarySheet, "A14", [
-  ["Match", "Start UTC", "Model Pick", "Market Pick", "Best Model Trade", "Edge", "EV / $", "Deploy"],
+  ["Match", "Start UTC", "Predicted Trade", "Market Pick", "Contract", "EV", "EV / Share", "Deploy"],
   ...matchSummary.map((row) => [
     row.match,
     row.start_time_utc,
@@ -134,16 +134,16 @@ writeBlock(summarySheet, "A14", [
 ]);
 
 writeBlock(recSheet, "A1", [
-  ["Match", "Start UTC", "Outcome", "Market Price", "Model Prob", "Calibrated Prob", "Edge", "EV / $", "Deploy", "Max Loss", "Profit If Win", "Market Question"],
+  ["Match", "Start UTC", "Predicted Outcome", "Trade", "Side", "Price x", "Backtest p", "EV", "Deploy", "Max Loss", "Profit If Win", "Market Question"],
   ...recommended.map((row) => [
     row.match,
     row.start_time_utc,
-    row.outcome,
-    asNumber(row.market_yes_price),
-    asNumber(row.model_probability),
-    asNumber(row.calibrated_probability),
-    asNumber(row.edge),
-    asNumber(row.ev_per_dollar),
+    row.predicted_outcome,
+    row.predicted_trade,
+    row.contract_side,
+    asNumber(row.polymarket_price_x),
+    asNumber(row.backtest_accuracy_p),
+    asNumber(row.expected_value),
     asNumber(row.deploy_amount),
     asNumber(row.max_loss),
     asNumber(row.profit_if_win),
@@ -155,35 +155,41 @@ writeBlock(detailSheet, "A1", [
   [
     "Match",
     "Start UTC",
-    "Outcome",
-    "Market Price",
-    "No-Vig Market Prob",
-    "Model Prob",
-    "Calibrated Prob",
-    "Edge",
-    "EV / $",
+    "Predicted Outcome",
+    "Predicted Trade",
+    "Contract Outcome",
+    "Side",
+    "Price x",
+    "Backtest p",
+    "EV",
+    "EV Simplified",
     "Kelly Fraction",
     "Deploy",
     "Recommended",
-    "Model Pick",
-    "Market Pick",
+    "Rating Edge",
+    "Edge Bin",
+    "Model Pick 3-Way",
+    "Market Pick 3-Way",
     "Slug",
   ],
   ...rows.map((row) => [
     row.match,
     row.start_time_utc,
-    row.outcome,
-    asNumber(row.market_yes_price),
-    asNumber(row.market_no_vig_probability),
-    asNumber(row.model_probability),
-    asNumber(row.calibrated_probability),
-    asNumber(row.edge),
-    asNumber(row.ev_per_dollar),
+    row.predicted_outcome,
+    row.predicted_trade,
+    row.contract_outcome,
+    row.contract_side,
+    asNumber(row.polymarket_price_x),
+    asNumber(row.backtest_accuracy_p),
+    asNumber(row.expected_value),
+    asNumber(row.expected_value_simplified),
     asNumber(row.full_kelly_fraction),
     asNumber(row.deploy_amount),
     row.recommended,
-    row.model_pick,
-    row.market_pick,
+    asNumber(row.rating_edge),
+    row.rating_edge_bin,
+    row.model_pick_3way,
+    row.market_pick_3way,
     row.slug,
   ]),
 ]);
@@ -192,8 +198,8 @@ summarySheet.getRange(`A1:H${14 + matchSummary.length}`).format.autofitColumns()
 summarySheet.getRange(`A1:H${14 + matchSummary.length}`).format.autofitRows();
 recSheet.getRange(`A1:L${1 + recommended.length}`).format.autofitColumns();
 recSheet.getRange(`A1:L${1 + recommended.length}`).format.autofitRows();
-detailSheet.getRange(`A1:O${1 + rows.length}`).format.autofitColumns();
-detailSheet.getRange(`A1:O${1 + rows.length}`).format.autofitRows();
+detailSheet.getRange(`A1:R${1 + rows.length}`).format.autofitColumns();
+detailSheet.getRange(`A1:R${1 + rows.length}`).format.autofitRows();
 
 await fs.mkdir(outputDir, { recursive: true });
 const output = await SpreadsheetFile.exportXlsx(workbook);
