@@ -1,0 +1,144 @@
+{
+  "created_at": "2026-06-14T19:13:53+00:00",
+  "scope": {
+    "tournament": "FIFA World Cup",
+    "years": [
+      1994,
+      2022
+    ],
+    "matches": 500,
+    "result_mode": "regular-time; penalty shootouts count as draws",
+    "stage_inference": "1994: first 36 matches group stage; 1998-2022: first 48 matches group stage; later matches knockout"
+  },
+  "prediction_filters": {
+    "skip_no_draw_knockout": true,
+    "exclude_draw_and_no_draw": false
+  },
+  "ranking_source": "rolling pre-match strength rank fallback",
+  "anti_overfit_method": "Parameters selected by tournament-year mean accuracy penalized by tournament-year accuracy volatility; tie-breaks penalize broad outcome overuse.",
+  "optimized_parameters": {
+    "economic_weights": {
+      "population": 0.1,
+      "climate": 0.0,
+      "wealth": 0.2,
+      "ranking": 0.7
+    },
+    "draw_baseline": 0.22,
+    "draw_decay": 2.5,
+    "draw_min": 0.06,
+    "draw_max": 0.24,
+    "logistic_slope": 13.0
+  },
+  "objective": {
+    "stdev_penalty": 0.35,
+    "weight_step": 0.1,
+    "candidates_searched": 68640,
+    "min_coverage": 0.75
+  },
+  "metrics": {
+    "correct": 375,
+    "total_matches": 500,
+    "scored_predictions": 455,
+    "skipped_predictions": 45,
+    "skip_reasons": {
+      "no_draw_knockout": 45
+    },
+    "pooled_accuracy": 0.8241758241758241,
+    "mean_year_accuracy": 0.8259567382622248,
+    "stdev_year_accuracy": 0.05662166003177771,
+    "robust_score": 0.8061391572511026,
+    "accuracy_by_year": {
+      "1994": {
+        "correct": 43,
+        "total": 48,
+        "accuracy": 0.8958333333333334
+      },
+      "1998": {
+        "correct": 48,
+        "total": 58,
+        "accuracy": 0.8275862068965517
+      },
+      "2002": {
+        "correct": 42,
+        "total": 58,
+        "accuracy": 0.7241379310344828
+      },
+      "2006": {
+        "correct": 49,
+        "total": 56,
+        "accuracy": 0.875
+      },
+      "2010": {
+        "correct": 50,
+        "total": 58,
+        "accuracy": 0.8620689655172413
+      },
+      "2014": {
+        "correct": 48,
+        "total": 60,
+        "accuracy": 0.8
+      },
+      "2018": {
+        "correct": 51,
+        "total": 59,
+        "accuracy": 0.864406779661017
+      },
+      "2022": {
+        "correct": 44,
+        "total": 58,
+        "accuracy": 0.7586206896551724
+      }
+    },
+    "predicted_outcome_counts": {
+      "team_b_loss": 211,
+      "no_draw": 126,
+      "team_a_loss": 118
+    },
+    "accuracy_by_abs_rating_edge": {
+      "0.00-0.03": {
+        "correct": 31,
+        "total": 39,
+        "accuracy": 0.7948717948717948
+      },
+      "0.03-0.06": {
+        "correct": 21,
+        "total": 31,
+        "accuracy": 0.6774193548387096
+      },
+      "0.06-0.10": {
+        "correct": 48,
+        "total": 52,
+        "accuracy": 0.9230769230769231
+      },
+      "0.10-0.15": {
+        "correct": 56,
+        "total": 71,
+        "accuracy": 0.7887323943661971
+      },
+      "0.15-0.22": {
+        "correct": 61,
+        "total": 79,
+        "accuracy": 0.7721518987341772
+      },
+      "0.22-0.35": {
+        "correct": 105,
+        "total": 122,
+        "accuracy": 0.860655737704918
+      },
+      "0.35+": {
+        "correct": 53,
+        "total": 61,
+        "accuracy": 0.8688524590163934
+      }
+    },
+    "candidates_searched": 68640
+  },
+  "outcome_definitions": {
+    "team_a_win": "Team A wins in regular time",
+    "draw": "Regular-time draw",
+    "team_b_win": "Team B wins in regular time",
+    "team_a_loss": "Team A does not win: draw or Team B win",
+    "no_draw": "Either team wins in regular time",
+    "team_b_loss": "Team B does not win: Team A win or draw"
+  }
+}
